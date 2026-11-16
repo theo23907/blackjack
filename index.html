@@ -73,7 +73,7 @@ button{transition:transform .1s}button:active{transform:scale(.95)}
 @keyframes chipdrop{0%{transform:translateY(-46px) scale(1.5);opacity:0}70%{transform:translateY(2px) scale(.95);opacity:1}100%{transform:none;opacity:1}}
 .ch{position:absolute;left:50%;top:50%;width:24px;height:24px;border-radius:50%;border:2px dashed rgba(255,255,255,.9);box-shadow:0 2px 4px rgba(0,0,0,.6),inset 0 0 0 2px rgba(0,0,0,.18);color:#fff;font:700 9px/20px system-ui;text-align:center;pointer-events:none;z-index:2}
 .ch.mine{outline:2px solid var(--gold)}
-.coin{display:inline-block;width:1.05em;height:1.05em;border-radius:50%;background:#c62828;border:2px dashed #fff;box-shadow:0 1px 2px rgba(0,0,0,.5),inset 0 0 0 2px rgba(0,0,0,.2);vertical-align:-.18em;box-sizing:border-box}
+.coin{display:inline-block;width:1.05em;height:1.05em;border-radius:50%;background:var(--chip,#c62828);border:2px dashed #fff;box-shadow:0 1px 2px rgba(0,0,0,.5),inset 0 0 0 2px rgba(0,0,0,.2);vertical-align:-.18em;box-sizing:border-box}
 .ch.drop{animation:chipdrop .4s ease-out both}
 .deck{position:relative;width:62px;height:82px;margin-right:8px}
 .deck .c{position:absolute}
@@ -89,6 +89,9 @@ button{transition:transform .1s}button:active{transform:scale(.95)}
 @keyframes reelspin{0%,100%{transform:translateY(-8px)}50%{transform:translateY(8px)}}
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:2px dashed rgba(255,255,255,.85)}
 @media(max-width:520px){.rc{font-size:11px;padding:10px 0}}
+.ccl{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.cc{font-size:12px;padding:6px 8px;text-align:left;display:flex;align-items:center;gap:6px;justify-content:space-between}
+.cc small{opacity:.7}.cc .coin{flex:none}
 </style>
 </head>
 <body>
@@ -110,11 +113,12 @@ const newState=g=>({game:g||'bj',phase:'lobby',players:[],dealer:[],turn:-1,msg:
 
 /* ---------- host engine ---------- */
 function commit(){render();if(docRef)docRef.set({s:JSON.stringify(S)}).catch(()=>{})}
-function addPlayer(id,name,bot,c){S.players.push({id,name:(name||'Player').slice(0,14),bot:!!bot,chips:c>=0?Math.floor(c):500,bet:0,hand:[],status:'',in:false,res:'',delta:0})}
+function addPlayer(id,name,bot,c){S.players.push({id,name:(name||'Player').slice(0,24),bot:!!bot,col:id===uid?loadCC().sel:'',chips:c>=0?Math.floor(c):500,bet:0,hand:[],status:'',in:false,res:'',delta:0})}
 function handle(a){
   if(S.game==='rl'&&['rbet','rclear','rready','rspin'].includes(a.type))return rhandle(a);
   const t=a.type,p=S.players.find(x=>x.id===a.id),own=a.id===uid;
-  if(t==='join'){if(!p)addPlayer(a.id,a.name,false,Number.isInteger(a.chips)&&a.chips>=0&&a.chips<=1e9?a.chips:500);else if(a.name)p.name=a.name.slice(0,14);return commit()}
+  if(t==='join'){if(!p)addPlayer(a.id,a.name,false,Number.isInteger(a.chips)&&a.chips>=0&&a.chips<=1e9?a.chips:500);else if(a.name)p.name=a.name.slice(0,24);{const q=S.players.find(x=>x.id===a.id);if(q&&CCOL.some(c=>c[0]===a.col))q.col=a.col}return commit()}
+  if(t==='cheat500'){if(p&&!p.bot&&(S.phase==='lobby'||S.phase==='over')){p.chips+=500;commit()}return}
   if(t==='follow'){if(p&&!p.bot){p.follow=!p.follow;commit()}return}
   if(t==='resetchips'){if(p&&(S.phase==='lobby'||S.phase==='over')){p.chips=100;p.res='';p.delta=0;commit()}return}
   if(own&&t==='addbot'&&S.players.length<6&&S.phase!=='play'&&S.phase!=='dealer'){const n=BOTS.find(b=>!S.players.some(x=>x.name===b))||'Bot '+S.players.length;addPlayer('bot'+Math.random().toString(36).slice(2,7),n,true);return commit()}
@@ -141,7 +145,7 @@ function followCarl(){
     else{const v=Math.min(c.bet,f.chips);if(v>0){f.bet=v;f.chips-=v}}})
 }
 function startRound(){
-  carlTick();S.players.forEach(p=>{p.lucky=!p.bot&&p.name.trim().toLowerCase()==='carl'&&Math.random()<.3});
+  carlTick();S.players.forEach(p=>{{const nm=p.name.trim().toLowerCase();p.lucky=!p.bot&&(nm==='luckypineapplewithcream'||(nm==='carl'&&Math.random()<.3))}});
   if(S.game==='rl')return startR();
   S.round++;S.phase='bet';S.dealer=[];S.turn=-1;S.msg='Place your bets!';
   S.players.forEach(p=>{if(p.bot&&p.chips<=0)p.chips=500;p.in=p.chips>0;p.hand=[];p.status='';p.res='';p.delta=0;p.bet=0;if(p.bot&&p.in){const o=betOpts(p);p.bet=p.carl?Math.min(p.chips,Math.max(50,Math.floor(p.chips*.15))):o[Math.random()*o.length|0];p.chips-=p.bet}});followCarl();
@@ -226,7 +230,7 @@ async function join(){
     if(!sn.exists){note='No table with that code. Ask the host to check it.';return render()}
     code=c;isHost=false;docRef=null;
     r.onSnapshot(s=>{if(s.exists){S=JSON.parse(s.data().s);render()}},()=>{});
-    act({type:'join',name:n,chips:loadBank()})
+    act({type:'join',name:n,chips:loadBank(),col:loadCC().sel})
   }catch(e){note='Couldn’t join that table.';render()}
 }
 function leave(){location.reload()}
@@ -265,7 +269,7 @@ function startR(){
       if(p.carl){const ks=['red','black','odd','even','low','high'];p.bets[ks[Math.random()*6|0]]=Math.max(1,Math.floor(p.chips*.2));p.bets['n'+(Math.random()*37|0)]=Math.max(1,Math.floor(p.chips*.03))}else if(!sumB(p.bets))p.bets.red=1;p.chips-=sumB(p.bets)}});followCarl();
   commit();if(S.players.every(x=>!x.in||x.ready))setTimeout(spinWheel,600)
 }
-function spinWheel(){if(S.phase!=='bet')return;if(!S.players.some(x=>x.in)){S.phase='over';S.msg='Nobody has chips left — reset from the chip menu.';return commit()}S.phase='spin';{const rg=S.players.filter(p=>(p.carl||p.lucky)&&p.in&&sumB(p.bets)>0),all=[...Array(37).keys()],net=(c,n)=>{let d=0;for(const k in c.bets)d+=wins(k,n)?c.bets[k]*pay(k):-c.bets[k];return d};let r=Math.random()*37|0,ok=all.filter(n=>rg.every(c=>net(c,n)>0));if(!ok.length&&rg.length)ok=all.filter(n=>net(rg[0],n)>0);if(ok.length)r=ok[Math.random()*ok.length|0];S.result=r}S.spin=Date.now();S.msg='No more bets…';commit();setTimeout(settleR,5600)}
+function spinWheel(){if(S.phase!=='bet')return;if(!S.players.some(x=>x.in)){S.phase='over';S.msg='Nobody has chips left — reset from the chip menu.';return commit()}S.phase='spin';{const rg=S.players.filter(p=>(p.carl||p.lucky)&&p.in&&sumB(p.bets)>0),all=[...Array(37).keys()],net=(c,n)=>{let d=0;for(const k in c.bets)d+=wins(k,n)?c.bets[k]*pay(k):-c.bets[k];return d};let r=Math.random()*37|0,ok=all.filter(n=>rg.every(c=>net(c,n)>0));if(!ok.length&&rg.length){const m=Math.max(...all.map(n=>net(rg[0],n)));ok=all.filter(n=>net(rg[0],n)===m)}if(ok.length)r=ok[Math.random()*ok.length|0];S.result=r}S.spin=Date.now();S.msg='No more bets…';commit();setTimeout(settleR,5600)}
 function settleR(){
   const n=S.result;
   S.players.forEach(p=>{if(!p.in)return;let d=0;for(const k in p.bets)d+=wins(k,n)?p.bets[k]*pay(k):-p.bets[k];p.chips+=d+sumB(p.bets);p.delta=d;p.res=!sumB(p.bets)?'':d>0?'Win':d<0?'Lose':'Even'});
@@ -288,7 +292,7 @@ function anim(){
   wheelAngle=target
 }
 const PCOL=['#2b6cb0','#c05621','#805ad5','#2f855a','#b83280','#718096'];
-function chipsHtml(k){let s='',j=0;S.players.forEach((p,i)=>{const v=p.in&&p.bets&&p.bets[k];if(!v)return;const o=j*4,f=fresh(S.round+p.id+k+v);s+=`<b class="ch${p.id===uid?' mine':''}${f?' drop':''}" style="background:${PCOL[i%6]};margin:${-12-o}px 0 0 ${-12+o}px">${v>=1000?(v/1000).toFixed(v%1000?1:0)+'k':v}</b>`;j++});return s}
+function chipsHtml(k){let s='',j=0;S.players.forEach((p,i)=>{const v=p.in&&p.bets&&p.bets[k];if(!v)return;const o=j*4,f=fresh(S.round+p.id+k+v);s+=`<b class="ch${p.id===uid?' mine':''}${f?' drop':''}" style="background:${ccOf(p,i)};margin:${-12-o}px 0 0 ${-12+o}px">${v>=1000?(v/1000).toFixed(v%1000?1:0)+'k':v}</b>`;j++});return s}
 function renderR(){
   const A=$('#app'),me=S.players.find(p=>p.id===uid),bet=S.phase==='bet',lobbyish=S.phase==='lobby'||S.phase==='over',spinning=S.phase==='spin';
   if(S.result!=null&&!spinning&&lastSpin!==S.spin){wheelAngle=-ORDER.indexOf(S.result)*360/37;lastSpin=S.spin}
@@ -299,20 +303,29 @@ function renderR(){
   const o3=[['dz1','1st 12'],['dz2','2nd 12'],['dz3','3rd 12']].map(x=>cell(x[0],x[1],'o')).join('');
   const o6=[['low','1–18'],['even','Even'],['red','Red'],['black','Black'],['odd','Odd'],['high','19–36']].map(x=>cell(x[0],x[1],x[0]==='red'?'r':x[0]==='black'?'b':'o')).join('');
   const hist=(S.hist||[]).map(n=>`<span class="hn ${colr(n)}">${n}</span>`).join('');
-  const seats=S.players.map((p,i)=>`<div class="seat${p.id===uid?' me':''}${S.phase==='over'&&p.in?(p.delta>0&&fresh(S.round+p.id+'w')?' win':p.delta<0?' lose':''):''}"><div class="nm"><span class="dot" style="background:${PCOL[i%6]}"></span>${esc(p.name)}${p.id===uid?'<span class="tag">you</span>':''}${p.carl?'<span class="tag" style="background:var(--gold);color:#111">★ rare</span>':p.bot?'<span class="tag">bot</span>':''}${p.carl&&me&&!me.bot?`<div><button data-a="follow" style="padding:4px 10px;font-size:12px;margin-top:4px">${me.follow?'Following ✓':'Follow Carl'}</button></div>`:''}</div><div><i class="coin"></i> <span data-id="${esc(p.id)}" data-chips="${p.chips}">${p.chips}</span></div><div style="opacity:.8">${S.phase==='lobby'?'':p.in?'Betting '+sumB(p.bets)+(p.ready?' · ready':''):(p.chips<=0?'Out of chips — use the chip menu':'Joins next round')}</div>${p.res?`<div class="res">${p.res} (${p.delta>0?'+':''}${p.delta})</div>`:''}</div>`).join('');
+  const seats=S.players.map((p,i)=>`<div class="seat${p.id===uid?' me':''}${S.phase==='over'&&p.in?(p.delta>0&&fresh(S.round+p.id+'w')?' win':p.delta<0?' lose':''):''}"><div class="nm"><span class="dot" style="background:${ccOf(p,i)}"></span>${esc(p.name)}${p.id===uid?'<span class="tag">you</span>':''}${p.carl?'<span class="tag" style="background:var(--gold);color:#111">★ rare</span>':p.bot?'<span class="tag">bot</span>':''}${p.carl&&me&&!me.bot?`<div><button data-a="follow" style="padding:4px 10px;font-size:12px;margin-top:4px">${me.follow?'Following ✓':'Follow Carl'}</button></div>`:''}</div><div><i class="coin"></i> <span data-id="${esc(p.id)}" data-chips="${p.chips}">${p.chips}</span></div><div style="opacity:.8">${S.phase==='lobby'?'':p.in?'Betting '+sumB(p.bets)+(p.ready?' · ready':''):(p.chips<=0?'Out of chips — use the chip menu':'Joins next round')}</div>${p.res?`<div class="res">${p.res} (${p.delta>0?'+':''}${p.delta})</div>`:''}</div>`).join('');
   let ctl='';
   if(can)ctl+=`<div class="row" style="justify-content:center;width:100%">Chip size <input id="rs" type="number" min="1" step="1" value="${stake}" style="width:110px">${[5,10,25,100].map(x=>`<button class="alt" data-a="stk" data-v="${x}">${x}</button>`).join('')}</div><div class="row" style="justify-content:center;width:100%"><button class="alt" data-a="rclear">Clear bets</button><button data-a="rready">Ready ✔</button></div>`;
   if(bet&&me&&me.in&&me.ready)ctl+='<span class="mut">Waiting for the others…</span>';
   if(isHost&&bet)ctl+='<button class="alt" data-a="rspin">Spin now</button>';
   if(isHost&&lobbyish)ctl+=`<button class="alt" data-a="addbot" ${S.players.length>=6?'disabled':''}>+ Bot</button><button class="alt" data-a="rmbot">− Bot</button><button data-a="${S.phase==='lobby'?'start':'next'}">${S.phase==='lobby'?'First spin':'Next round'}</button>`;
   if(!isHost&&lobbyish)ctl+='<span class="mut">Waiting for the host…</span>';
-  const h=`<div class="row" style="justify-content:space-between;padding-right:92px"><h1>◉ Roulette</h1><div class="row">${code?`<span class="code">${code}</span>`:''}<button class="alt" data-a="leave">Leave</button></div></div><div class="felt"><div class="wheelwrap"><svg viewBox="0 0 220 220" class="wheel"><g id="wh" style="transform:rotate(${wheelAngle}deg)">${WHEEL}<circle cx="110" cy="110" r="60" fill="#2a1a0e" stroke="#d9b84a" stroke-width="1.5"/></g><g id="bl"><circle cx="110" cy="22" r="5.5" fill="#fff" stroke="#999" stroke-width=".8"/></g><polygon points="104,1 116,1 110,12" fill="#e6b422"/></svg></div><div class="hist">${hist}</div></div><div class="msg">${esc(S.msg)}${S.note?' · '+esc(S.note):''}</div><div class="felt"><div class="rg">${g}</div><div class="rd3">${o3}</div><div class="rd6">${o6}</div></div><div class="ctl">${ctl}</div><div class="felt"><div class="grid">${seats}</div></div>`;
+  const h=`<div class="row" style="justify-content:space-between;padding-right:92px"><h1>◉ Roulette</h1><div class="row">${code?`<span class="code">${code}</span>`:''}<button class="alt" data-a="leave">Leave</button></div></div><div class="felt"><div class="wheelwrap"><svg viewBox="0 0 220 220" class="wheel"><g id="wh" style="transform:rotate(${wheelAngle}deg)">${WHEEL}<circle cx="110" cy="110" r="60" fill="#2a1a0e" stroke="#d9b84a" stroke-width="1.5"/></g><g id="bl"><circle cx="110" cy="22" r="5.5" fill="#fff" stroke="#999" stroke-width=".8"/></g><polygon points="104,1 116,1 110,12" fill="#e6b422"/></svg></div><div class="hist">${hist}</div><div class="msg" style="margin-bottom:0">Total bet: ${sumB(mine)}</div></div><div class="msg">${esc(S.msg)}${S.note?' · '+esc(S.note):''}</div><div class="felt"><div class="rg">${g}</div><div class="rd3">${o3}</div><div class="rd6">${o6}</div></div><div class="ctl">${ctl}</div><div class="felt"><div class="grid">${seats}</div></div>`;
   const fid=document.activeElement&&document.activeElement.id;
   A.innerHTML=h;
   if(fid==='rs'){const e=$('#rs');if(e)e.focus()}
   tweenChips();anim()
 }
 function deckHtml(){const s=fresh(S.round+'sh');return'<div class="deck'+(s?' shuf':'')+'">'+Array.from({length:8},(_,i)=>'<div class="c back" style="top:'+(-i)+'px;left:'+(i*.5)+'px;animation-delay:'+(i*.07)+'s"></div>').join('')+'</div>'+(s?'<span style="align-self:center;opacity:.85">Dealer is shuffling…</span>':'')}
+/* ---------- chip colors ---------- */
+const CCOL=[['red','Red','#c62828',0],['blue','Blue','#2b6cb0',1000],['green','Green','#2f855a',5000],['purple','Purple','#805ad5',25000],['gold','Gold','#d69e2e',100000],['black','Black','#161616',1000000]];
+let ccMsg='';
+function loadCC(){try{const o=JSON.parse(localStorage.bjcc||'{}'),ids=CCOL.map(c=>c[0]),own=(Array.isArray(o.own)?o.own:[]).filter(x=>ids.includes(x));if(!own.includes('red'))own.unshift('red');return{own,sel:own.includes(o.sel)?o.sel:'red'}}catch(e){return{own:['red'],sel:'red'}}}
+function saveCC(o){try{localStorage.bjcc=JSON.stringify(o)}catch(e){}}
+const ccHex=id=>(CCOL.find(c=>c[0]===id)||CCOL[0])[2];
+const ccOf=(p,i)=>p.id===uid?ccHex(loadCC().sel):p.col?ccHex(p.col):PCOL[i%6];
+function applyCC(){document.documentElement.style.setProperty('--chip',ccHex(loadCC().sel))}
+function ccPanel(){const o=loadCC();return'<div class="panel"><b>Chip colors</b><div class="ccl">'+CCOL.map(c=>{const own=o.own.includes(c[0]),sel=o.sel===c[0];return'<button class="alt cc" data-a="cc" data-v="'+c[0]+'"><span><i class="coin" style="background:'+c[2]+'"></i> '+c[1]+'</span><small>'+(sel?'✓':own?'owned':c[3].toLocaleString())+'</small></button>'}).join('')+'</div>'+(ccMsg?'<p class="mut" style="margin:6px 0 0">'+esc(ccMsg)+'</p>':'')+'</div>'}
 /* ---------- slots ---------- */
 let slotsOn=false;
 const SL={r:['🍒','🔔','7️⃣'],busy:false,bet:10,win:false,done:[true,true,true],msg:'Set your bet and hit Spin!'};
@@ -356,6 +369,7 @@ function card(c,hide,k,d){
 function tweenChips(){document.querySelectorAll('[data-chips]').forEach(el=>{const id=el.dataset.id,to=+el.dataset.chips,from=prevChips[id]??to;prevChips[id]=to;if(from===to)return;const t0=performance.now();(function f(t){const k=Math.min(1,(t-t0)/800);el.textContent=Math.round(from+(to-from)*k);if(k<1)requestAnimationFrame(f)})(t0)})}
 function betCustom(){const m=S&&S.players.find(p=>p.id===uid),i=$('#bi');if(!m||!i)return;let v=Math.floor(+i.value);if(!(v>0))return;act({type:'bet',v:Math.min(v,m.chips),name:myName})}
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='bi')betCustom()});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='v'){e.preventDefault();if(S)act({type:'cheat500'});else if(!SL.busy){saveBank(loadBank()+500);syncBank();tweenChips()}}});
 function loadBank(){try{const v=parseInt(localStorage.bjbank,10);return v>=0?v:500}catch(e){return 500}}
 function saveBank(v){try{localStorage.bjbank=String(Math.max(0,Math.floor(v)))}catch(e){}}
 function syncBank(){const m=S&&S.players.find(p=>p.id===uid);if(m&&Number.isFinite(m.chips))saveBank(m.chips);const b=$('#bank'),v=loadBank();if(b)b.innerHTML='<i class="coin"></i> <span data-id="bank" data-chips="'+v+'">'+v+'</span> ▾'}
@@ -379,8 +393,8 @@ function render(){
   const A=$('#app');
   if(!S){
     A.innerHTML='<h1>♠ Casino Night</h1><p class="mut">Blackjack or roulette — against bots, or at a table with friends.</p>'+
-    '<div class="panel"><label class="mut">Your name</label><input id="nm" maxlength="14" value="'+esc(myName)+'" placeholder="Your name"></div>'+
-    '<div class="grid"><div class="panel"><b>Solo</b><p class="mut">You and two bots.</p><button data-a="solo">♠ Blackjack</button> <button data-a="solorl">◉ Roulette</button> <button data-a="slots">🎰 Slots</button></div>'+
+    '<div class="panel"><label class="mut">Your name</label><input id="nm" maxlength="24" value="'+esc(myName)+'" placeholder="Your name"></div>'+
+    '<div class="grid"><div class="panel"><b>Solo</b><p class="mut">You and two bots.</p><button data-a="solo">♠ Blackjack</button> <button data-a="solorl">◉ Roulette</button> <button data-a="slots">🎰 Slots</button></div>'+ccPanel()+
     '<div class="panel"><b>Host a table</b><p class="mut">Get a code and share this page’s link.</p><button data-a="create" '+(dbm?'':'disabled')+'>♠ Blackjack</button> <button data-a="createrl" '+(dbm?'':'disabled')+'>◉ Roulette</button>'+(dbm?'':'<p class="mut">Sign in to host.</p>')+'</div>'+
     '<div class="panel"><b>Join a table</b><div class="row"><input id="cd" maxlength="4" placeholder="CODE" style="width:110px;text-transform:uppercase"><button data-a="join" '+(dbm?'':'disabled')+'>Join</button></div></div></div>'+
     (note?'<p class="msg">'+esc(note)+'</p>':'')+
@@ -413,10 +427,11 @@ function render(){
 }
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
-  if(a==='betc')betCustom();else if(a==='solo')solo();else if(a==='solorl')solo('rl');else if(a==='create')create();else if(a==='createrl')create('rl');else if(a==='stk'){stake=+b.dataset.v;render()}else if(a==='spot')spotBet(b.dataset.k);else if(a==='slots'){slotsOn=true;render()}else if(a==='slbet'){SL.bet=+b.dataset.v;const i=$('#sb');if(i)i.value=SL.bet}else if(a==='slmax'){SL.bet=loadBank();const i=$('#sb');if(i)i.value=SL.bet}else if(a==='slgo'){const i=$('#sb');SL.bet=Math.floor(+(i&&i.value))||SL.bet;slotsGo()}else if(a==='resetbank'){saveBank(500);render()}else if(a==='join')join();else if(a==='leave')leave();
+  if(a==='betc')betCustom();else if(a==='solo')solo();else if(a==='solorl')solo('rl');else if(a==='create')create();else if(a==='createrl')create('rl');else if(a==='stk'){stake=+b.dataset.v;render()}else if(a==='spot')spotBet(b.dataset.k);else if(a==='cc'){const ni=$('#nm');if(ni)myName=ni.value;const id=b.dataset.v,c=CCOL.find(x=>x[0]===id),o=loadCC();if(c){ccMsg='';if(o.own.includes(id)){o.sel=id}else if(loadBank()>=c[3]){saveBank(loadBank()-c[3]);o.own.push(id);o.sel=id;ccMsg='Unlocked '+c[1]+' chips!'}else ccMsg='You need '+c[3].toLocaleString()+' chips for '+c[1]+'.';saveCC(o);applyCC();render()}}
+  else if(a==='slots'){slotsOn=true;render()}else if(a==='slbet'){SL.bet=+b.dataset.v;const i=$('#sb');if(i)i.value=SL.bet}else if(a==='slmax'){SL.bet=loadBank();const i=$('#sb');if(i)i.value=SL.bet}else if(a==='slgo'){const i=$('#sb');SL.bet=Math.floor(+(i&&i.value))||SL.bet;slotsGo()}else if(a==='resetbank'){saveBank(500);render()}else if(a==='join')join();else if(a==='leave')leave();
   else act({type:a,v:b.dataset.v?+b.dataset.v:0,name:myName})
 });
-render();
+applyCC();render();
 (async()=>{try{dbm=await claude.use('db')}catch(e){dbm=null}if(!S)render()})();
 </script>
 </body>
