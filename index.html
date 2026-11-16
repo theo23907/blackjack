@@ -127,7 +127,7 @@ function betOpts(p){const o=[10,25,50].filter(x=>x<=p.chips);return o.length?o:[
 function carlTick(){
   S.note='';
   if(S.players.some(p=>p.carl)){S.carlLeft--;if(S.carlLeft<=0){S.players=S.players.filter(p=>!p.carl);S.players.forEach(p=>p.follow=false);S.note='Carl cashed out and left the table.'}}
-  else if(S.players.length<6&&Math.random()<.08){addPlayer('carl','Carl',true,1000);S.players[S.players.length-1].carl=true;S.carlLeft=3;S.note='★ Carl just sat down. He never loses…'}
+  else if(S.round===0&&S.players.length<6&&Math.random()<.08){addPlayer('carl','Carl',true,1000);S.players[S.players.length-1].carl=true;S.carlLeft=1e9;S.note='★ Carl just sat down. He never loses…'}
 }
 function rigCarl(){
   const rg=S.players.filter(p=>(p.carl||p.lucky)&&p.in);if(!rg.length)return;
@@ -141,7 +141,7 @@ function followCarl(){
     else{const v=Math.min(c.bet,f.chips);if(v>0){f.bet=v;f.chips-=v}}})
 }
 function startRound(){
-  carlTick();S.players.forEach(p=>{p.lucky=!p.bot&&p.name.trim().toLowerCase()==='carl'&&Math.random()<.1});
+  carlTick();S.players.forEach(p=>{p.lucky=!p.bot&&p.name.trim().toLowerCase()==='carl'&&Math.random()<.3});
   if(S.game==='rl')return startR();
   S.round++;S.phase='bet';S.dealer=[];S.turn=-1;S.msg='Place your bets!';
   S.players.forEach(p=>{if(p.bot&&p.chips<=0)p.chips=500;p.in=p.chips>0;p.hand=[];p.status='';p.res='';p.delta=0;p.bet=0;if(p.bot&&p.in){const o=betOpts(p);p.bet=p.carl?Math.min(p.chips,Math.max(50,Math.floor(p.chips*.15))):o[Math.random()*o.length|0];p.chips-=p.bet}});followCarl();
