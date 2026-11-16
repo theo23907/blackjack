@@ -75,6 +75,18 @@ button{transition:transform .1s}button:active{transform:scale(.95)}
 .ch.mine{outline:2px solid var(--gold)}
 .coin{display:inline-block;width:1.05em;height:1.05em;border-radius:50%;background:#c62828;border:2px dashed #fff;box-shadow:0 1px 2px rgba(0,0,0,.5),inset 0 0 0 2px rgba(0,0,0,.2);vertical-align:-.18em;box-sizing:border-box}
 .ch.drop{animation:chipdrop .4s ease-out both}
+.deck{position:relative;width:62px;height:82px;margin-right:8px}
+.deck .c{position:absolute}
+@keyframes riffL{0%,100%{transform:none}25%{transform:translateX(-30px) rotate(-10deg)}55%{transform:translateX(-6px) rotate(0)}}
+@keyframes riffR{0%,100%{transform:none}25%{transform:translateX(30px) rotate(10deg)}55%{transform:translateX(6px) rotate(0)}}
+.deck.shuf .c:nth-child(odd){animation:riffL 1.1s ease-in-out 2}
+.deck.shuf .c:nth-child(even){animation:riffR 1.1s ease-in-out 2}
+.slotbox{display:flex;gap:10px;justify-content:center;padding:10px}
+.reel{width:min(90px,26vw);height:min(110px,32vw);background:#fff;color:#111;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:min(56px,15vw);box-shadow:inset 0 0 14px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.4);border:3px solid var(--gold)}
+.reel.spin{animation:reelspin .12s linear infinite;filter:blur(1.2px)}
+.reel.stopd{animation:pop .35s ease-out}
+.reel.won{animation:glow 1s ease-in-out 3}
+@keyframes reelspin{0%,100%{transform:translateY(-8px)}50%{transform:translateY(8px)}}
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:2px dashed rgba(255,255,255,.85)}
 @media(max-width:520px){.rc{font-size:11px;padding:10px 0}}
 </style>
@@ -103,28 +115,47 @@ function handle(a){
   if(S.game==='rl'&&['rbet','rclear','rready','rspin'].includes(a.type))return rhandle(a);
   const t=a.type,p=S.players.find(x=>x.id===a.id),own=a.id===uid;
   if(t==='join'){if(!p)addPlayer(a.id,a.name,false,Number.isInteger(a.chips)&&a.chips>=0&&a.chips<=1e9?a.chips:500);else if(a.name)p.name=a.name.slice(0,14);return commit()}
+  if(t==='follow'){if(p&&!p.bot){p.follow=!p.follow;commit()}return}
   if(t==='resetchips'){if(p&&(S.phase==='lobby'||S.phase==='over')){p.chips=100;p.res='';p.delta=0;commit()}return}
   if(own&&t==='addbot'&&S.players.length<6&&S.phase!=='play'&&S.phase!=='dealer'){const n=BOTS.find(b=>!S.players.some(x=>x.name===b))||'Bot '+S.players.length;addPlayer('bot'+Math.random().toString(36).slice(2,7),n,true);return commit()}
-  if(own&&t==='rmbot'&&(S.phase==='lobby'||S.phase==='over')){const i=S.players.map(x=>x.bot).lastIndexOf(true);if(i>=0)S.players.splice(i,1);return commit()}
+  if(own&&t==='rmbot'&&(S.phase==='lobby'||S.phase==='over')){const i=S.players.map(x=>x.bot&&!x.carl).lastIndexOf(true);if(i>=0)S.players.splice(i,1);return commit()}
   if(own&&(t==='start'||t==='next')&&(S.phase==='lobby'||S.phase==='over'))return startRound();
   if(t==='bet'&&S.phase==='bet'&&p&&p.in&&!p.bet&&!p.bot&&Number.isInteger(a.v)&&a.v>0&&a.v<=p.chips){p.bet=a.v;p.chips-=a.v;S.msg='Bets are going in…';commit();return checkDeal()}
-  if(['hit','stand','double'].includes(t)&&S.phase==='play'&&p&&S.players[S.turn]===p&&!p.bot)move(p,t)
+  if(['hit','stand','double'].includes(t)&&S.phase==='play'&&p&&S.players[S.turn]===p&&!p.bot&&!p.status)move(p,t)
 }
 function betOpts(p){const o=[10,25,50].filter(x=>x<=p.chips);return o.length?o:[p.chips]}
+function carlTick(){
+  S.note='';
+  if(S.players.some(p=>p.carl)){S.carlLeft--;if(S.carlLeft<=0){S.players=S.players.filter(p=>!p.carl);S.players.forEach(p=>p.follow=false);S.note='Carl cashed out and left the table.'}}
+  else if(S.players.length<6&&Math.random()<.08){addPlayer('carl','Carl',true,1000);S.players[S.players.length-1].carl=true;S.carlLeft=3;S.note='★ Carl just sat down. He never loses…'}
+}
+function rigCarl(){
+  const rg=S.players.filter(p=>(p.carl||p.lucky)&&p.in);if(!rg.length)return;
+  rg.forEach(c=>{c.hand=[[0,Math.random()*4|0],[9+(Math.random()*4|0),Math.random()*4|0]];c.status='bj'});
+  if(val(S.dealer).t===21)S.dealer[1]=[1+(Math.random()*5|0),0]
+}
+function followCarl(){
+  const c=S.players.find(p=>p.carl&&p.in);if(!c)return;
+  S.players.forEach(f=>{if(f.bot||!f.in||!f.follow)return;
+    if(S.game==='rl'){let any=false;for(const k in c.bets){const v=Math.min(c.bets[k],f.chips);if(v>0){f.bets[k]=(f.bets[k]||0)+v;f.chips-=v;any=true}}if(any)f.ready=true}
+    else{const v=Math.min(c.bet,f.chips);if(v>0){f.bet=v;f.chips-=v}}})
+}
 function startRound(){
+  carlTick();S.players.forEach(p=>{p.lucky=!p.bot&&p.name.trim().toLowerCase()==='carl'&&Math.random()<.1});
   if(S.game==='rl')return startR();
   S.round++;S.phase='bet';S.dealer=[];S.turn=-1;S.msg='Place your bets!';
-  S.players.forEach(p=>{if(p.bot&&p.chips<=0)p.chips=500;p.in=p.chips>0;p.hand=[];p.status='';p.res='';p.delta=0;p.bet=0;if(p.bot&&p.in){const o=betOpts(p);p.bet=o[Math.random()*o.length|0];p.chips-=p.bet}});
+  S.players.forEach(p=>{if(p.bot&&p.chips<=0)p.chips=500;p.in=p.chips>0;p.hand=[];p.status='';p.res='';p.delta=0;p.bet=0;if(p.bot&&p.in){const o=betOpts(p);p.bet=p.carl?Math.min(p.chips,Math.max(50,Math.floor(p.chips*.15))):o[Math.random()*o.length|0];p.chips-=p.bet}});followCarl();
   commit();checkDeal()
 }
 function checkDeal(){if(S.phase!=='bet')return;if(!S.players.some(x=>x.in)){S.phase='over';S.msg='Nobody has chips left — reset from the chip menu.';return commit()}if(S.players.every(x=>!x.in||x.bet>0))setTimeout(deal,500)}
 function deal(){
   S.phase='play';
   S.players.forEach(p=>{if(p.in){p.hand=[draw(),draw()];p.status=val(p.hand).t===21?'bj':''}});
-  S.dealer=[draw(),draw()];S.turn=-1;S.msg='Cards are out.';commit();
+  S.dealer=[draw(),draw()];rigCarl();S.turn=-1;S.msg='Cards are out.';commit();
   setTimeout(()=>val(S.dealer).t===21?dealerPlay():nextTurn(),700)
 }
 function nextTurn(){
+  if(S.phase!=='play')return;
   let i=S.turn+1;while(i<S.players.length&&!(S.players[i].in&&!S.players[i].status))i++;
   if(i>=S.players.length)return dealerPlay();
   S.turn=i;S.msg=S.players[i].name+(S.players[i].id===uid?' — your move':'’s turn');commit();
@@ -148,6 +179,7 @@ function move(p,t){
   if(p.status)setTimeout(nextTurn,600);else if(p.bot)setTimeout(botMove,1100)
 }
 function dealerPlay(){
+  if(S.phase!=='play')return;
   S.phase='dealer';S.turn=-1;S.msg='Dealer’s turn…';commit();
   const step=()=>{
     const live=S.players.some(p=>p.in&&p.status!=='bust'&&p.status!=='bj');
@@ -155,6 +187,7 @@ function dealerPlay(){
   };setTimeout(step,900)
 }
 function settle(){
+  if(S.phase==='over')return;
   const dv=val(S.dealer).t,dbj=S.dealer.length===2&&dv===21;
   S.players.forEach(p=>{if(!p.in)return;const v=val(p.hand).t;let d=0,r;
     if(p.status==='bust'){d=-p.bet;r='Bust'}
@@ -227,12 +260,12 @@ function startR(){
   S.round++;S.phase='bet';S.result=null;S.msg='Place your bets!';
   const keys=['red','black','odd','even','low','high','dz1','dz2','dz3'];
   S.players.forEach(p=>{if(p.bot&&p.chips<=0)p.chips=500;p.in=p.chips>0;p.bets={};p.ready=false;p.res='';p.delta=0;p.hand=[];p.bet=0;
-    if(p.bot){p.ready=true;const n=1+(Math.random()*3|0);let left=Math.max(1,Math.floor(p.chips*.3));
+    if(p.bot){p.ready=true;const n=p.carl?0:1+(Math.random()*3|0);let left=Math.max(1,Math.floor(p.chips*.3));
       for(let i=0;i<n;i++){const k=Math.random()<.4?'n'+(Math.random()*37|0):keys[Math.random()*keys.length|0],v=Math.max(1,Math.floor(left/(n-i)*(.5+Math.random())));if(v<=left){p.bets[k]=(p.bets[k]||0)+v;left-=v}}
-      if(!sumB(p.bets))p.bets.red=1;p.chips-=sumB(p.bets)}});
+      if(p.carl){const ks=['red','black','odd','even','low','high'];p.bets[ks[Math.random()*6|0]]=Math.max(1,Math.floor(p.chips*.2));p.bets['n'+(Math.random()*37|0)]=Math.max(1,Math.floor(p.chips*.03))}else if(!sumB(p.bets))p.bets.red=1;p.chips-=sumB(p.bets)}});followCarl();
   commit();if(S.players.every(x=>!x.in||x.ready))setTimeout(spinWheel,600)
 }
-function spinWheel(){if(S.phase!=='bet')return;if(!S.players.some(x=>x.in)){S.phase='over';S.msg='Nobody has chips left — reset from the chip menu.';return commit()}S.phase='spin';S.result=Math.random()*37|0;S.spin=Date.now();S.msg='No more bets…';commit();setTimeout(settleR,5600)}
+function spinWheel(){if(S.phase!=='bet')return;if(!S.players.some(x=>x.in)){S.phase='over';S.msg='Nobody has chips left — reset from the chip menu.';return commit()}S.phase='spin';{const rg=S.players.filter(p=>(p.carl||p.lucky)&&p.in&&sumB(p.bets)>0),all=[...Array(37).keys()],net=(c,n)=>{let d=0;for(const k in c.bets)d+=wins(k,n)?c.bets[k]*pay(k):-c.bets[k];return d};let r=Math.random()*37|0,ok=all.filter(n=>rg.every(c=>net(c,n)>0));if(!ok.length&&rg.length)ok=all.filter(n=>net(rg[0],n)>0);if(ok.length)r=ok[Math.random()*ok.length|0];S.result=r}S.spin=Date.now();S.msg='No more bets…';commit();setTimeout(settleR,5600)}
 function settleR(){
   const n=S.result;
   S.players.forEach(p=>{if(!p.in)return;let d=0;for(const k in p.bets)d+=wins(k,n)?p.bets[k]*pay(k):-p.bets[k];p.chips+=d+sumB(p.bets);p.delta=d;p.res=!sumB(p.bets)?'':d>0?'Win':d<0?'Lose':'Even'});
@@ -266,18 +299,48 @@ function renderR(){
   const o3=[['dz1','1st 12'],['dz2','2nd 12'],['dz3','3rd 12']].map(x=>cell(x[0],x[1],'o')).join('');
   const o6=[['low','1–18'],['even','Even'],['red','Red'],['black','Black'],['odd','Odd'],['high','19–36']].map(x=>cell(x[0],x[1],x[0]==='red'?'r':x[0]==='black'?'b':'o')).join('');
   const hist=(S.hist||[]).map(n=>`<span class="hn ${colr(n)}">${n}</span>`).join('');
-  const seats=S.players.map((p,i)=>`<div class="seat${p.id===uid?' me':''}${S.phase==='over'&&p.in?(p.delta>0&&fresh(S.round+p.id+'w')?' win':p.delta<0?' lose':''):''}"><div class="nm"><span class="dot" style="background:${PCOL[i%6]}"></span>${esc(p.name)}${p.id===uid?'<span class="tag">you</span>':''}${p.bot?'<span class="tag">bot</span>':''}</div><div><i class="coin"></i> <span data-id="${esc(p.id)}" data-chips="${p.chips}">${p.chips}</span></div><div style="opacity:.8">${S.phase==='lobby'?'':p.in?'Betting '+sumB(p.bets)+(p.ready?' · ready':''):(p.chips<=0?'Out of chips — use the chip menu':'Joins next round')}</div>${p.res?`<div class="res">${p.res} (${p.delta>0?'+':''}${p.delta})</div>`:''}</div>`).join('');
+  const seats=S.players.map((p,i)=>`<div class="seat${p.id===uid?' me':''}${S.phase==='over'&&p.in?(p.delta>0&&fresh(S.round+p.id+'w')?' win':p.delta<0?' lose':''):''}"><div class="nm"><span class="dot" style="background:${PCOL[i%6]}"></span>${esc(p.name)}${p.id===uid?'<span class="tag">you</span>':''}${p.carl?'<span class="tag" style="background:var(--gold);color:#111">★ rare</span>':p.bot?'<span class="tag">bot</span>':''}${p.carl&&me&&!me.bot?`<div><button data-a="follow" style="padding:4px 10px;font-size:12px;margin-top:4px">${me.follow?'Following ✓':'Follow Carl'}</button></div>`:''}</div><div><i class="coin"></i> <span data-id="${esc(p.id)}" data-chips="${p.chips}">${p.chips}</span></div><div style="opacity:.8">${S.phase==='lobby'?'':p.in?'Betting '+sumB(p.bets)+(p.ready?' · ready':''):(p.chips<=0?'Out of chips — use the chip menu':'Joins next round')}</div>${p.res?`<div class="res">${p.res} (${p.delta>0?'+':''}${p.delta})</div>`:''}</div>`).join('');
   let ctl='';
   if(can)ctl+=`<div class="row" style="justify-content:center;width:100%">Chip size <input id="rs" type="number" min="1" step="1" value="${stake}" style="width:110px">${[5,10,25,100].map(x=>`<button class="alt" data-a="stk" data-v="${x}">${x}</button>`).join('')}</div><div class="row" style="justify-content:center;width:100%"><button class="alt" data-a="rclear">Clear bets</button><button data-a="rready">Ready ✔</button></div>`;
   if(bet&&me&&me.in&&me.ready)ctl+='<span class="mut">Waiting for the others…</span>';
   if(isHost&&bet)ctl+='<button class="alt" data-a="rspin">Spin now</button>';
   if(isHost&&lobbyish)ctl+=`<button class="alt" data-a="addbot" ${S.players.length>=6?'disabled':''}>+ Bot</button><button class="alt" data-a="rmbot">− Bot</button><button data-a="${S.phase==='lobby'?'start':'next'}">${S.phase==='lobby'?'First spin':'Next round'}</button>`;
   if(!isHost&&lobbyish)ctl+='<span class="mut">Waiting for the host…</span>';
-  const h=`<div class="row" style="justify-content:space-between;padding-right:92px"><h1>◉ Roulette</h1><div class="row">${code?`<span class="code">${code}</span>`:''}<button class="alt" data-a="leave">Leave</button></div></div><div class="felt"><div class="wheelwrap"><svg viewBox="0 0 220 220" class="wheel"><g id="wh" style="transform:rotate(${wheelAngle}deg)">${WHEEL}<circle cx="110" cy="110" r="60" fill="#2a1a0e" stroke="#d9b84a" stroke-width="1.5"/></g><g id="bl"><circle cx="110" cy="22" r="5.5" fill="#fff" stroke="#999" stroke-width=".8"/></g><polygon points="104,1 116,1 110,12" fill="#e6b422"/></svg></div><div class="hist">${hist}</div></div><div class="msg">${esc(S.msg)}</div><div class="felt"><div class="rg">${g}</div><div class="rd3">${o3}</div><div class="rd6">${o6}</div></div><div class="ctl">${ctl}</div><div class="felt"><div class="grid">${seats}</div></div>`;
+  const h=`<div class="row" style="justify-content:space-between;padding-right:92px"><h1>◉ Roulette</h1><div class="row">${code?`<span class="code">${code}</span>`:''}<button class="alt" data-a="leave">Leave</button></div></div><div class="felt"><div class="wheelwrap"><svg viewBox="0 0 220 220" class="wheel"><g id="wh" style="transform:rotate(${wheelAngle}deg)">${WHEEL}<circle cx="110" cy="110" r="60" fill="#2a1a0e" stroke="#d9b84a" stroke-width="1.5"/></g><g id="bl"><circle cx="110" cy="22" r="5.5" fill="#fff" stroke="#999" stroke-width=".8"/></g><polygon points="104,1 116,1 110,12" fill="#e6b422"/></svg></div><div class="hist">${hist}</div></div><div class="msg">${esc(S.msg)}${S.note?' · '+esc(S.note):''}</div><div class="felt"><div class="rg">${g}</div><div class="rd3">${o3}</div><div class="rd6">${o6}</div></div><div class="ctl">${ctl}</div><div class="felt"><div class="grid">${seats}</div></div>`;
   const fid=document.activeElement&&document.activeElement.id;
   A.innerHTML=h;
   if(fid==='rs'){const e=$('#rs');if(e)e.focus()}
   tweenChips();anim()
+}
+function deckHtml(){const s=fresh(S.round+'sh');return'<div class="deck'+(s?' shuf':'')+'">'+Array.from({length:8},(_,i)=>'<div class="c back" style="top:'+(-i)+'px;left:'+(i*.5)+'px;animation-delay:'+(i*.07)+'s"></div>').join('')+'</div>'+(s?'<span style="align-self:center;opacity:.85">Dealer is shuffling…</span>':'')}
+/* ---------- slots ---------- */
+let slotsOn=false;
+const SL={r:['🍒','🔔','7️⃣'],busy:false,bet:10,win:false,done:[true,true,true],msg:'Set your bet and hit Spin!'};
+const SYM=[['🍒',30,5],['🍋',25,8],['🔔',20,15],['⭐',14,25],['💎',8,60],['7️⃣',3,200]];
+function pick(){let x=Math.random()*100;for(const s of SYM){if((x-=s[1])<0)return s}return SYM[0]}
+function paintSlots(){
+  for(let i=0;i<3;i++){const e=$('#r'+i);if(e){e.textContent=SL.r[i];e.className='reel'+(SL.busy&&!SL.done[i]?' spin':'')+(SL.busy&&SL.done[i]?' stopd':'')+(!SL.busy&&SL.win?' won':'')}}
+  const m=$('#slmsg');if(m)m.textContent=SL.msg;const g=$('#slgo');if(g)g.disabled=SL.busy
+}
+function slotsGo(){
+  if(SL.busy)return;
+  const bank=loadBank(),bet=Math.floor(SL.bet);
+  if(!(bet>0)||bet>bank){SL.msg=bank<=0?'Out of chips — use the chip menu (top right) to reset.':'Not enough chips for that bet.';return paintSlots()}
+  saveBank(bank-bet);syncBank();tweenChips();
+  SL.busy=true;SL.win=false;SL.done=[false,false,false];SL.msg='Spinning…';
+  const res=[pick(),pick(),pick()];
+  const iv=setInterval(()=>{for(let i=0;i<3;i++)if(!SL.done[i])SL.r[i]=SYM[Math.random()*SYM.length|0][0];paintSlots()},80);
+  [900,1450,2000].forEach((ms,i)=>setTimeout(()=>{
+    SL.done[i]=true;SL.r[i]=res[i][0];
+    if(i===2){clearInterval(iv);const s=res.map(x=>x[0]);let pay=0;
+      if(s[0]===s[1]&&s[1]===s[2])pay=bet*res[0][2];else if(s.filter(x=>x==='🍒').length===2)pay=bet*2;
+      saveBank(loadBank()+pay);syncBank();tweenChips();SL.busy=false;SL.win=pay>0;
+      SL.msg=pay>0?'You win '+pay+' chips! (net +'+(pay-bet)+')':'No luck — spin again!'}
+    paintSlots()},ms))
+}
+function renderSlots(){
+  $('#app').innerHTML=`<div class="row" style="justify-content:space-between;padding-right:92px"><h1>🎰 Slots</h1><button class="alt" data-a="leave">Leave</button></div><div class="felt"><div class="slotbox"><div class="reel" id="r0"></div><div class="reel" id="r1"></div><div class="reel" id="r2"></div></div><div class="msg" id="slmsg"></div></div><div class="ctl"><input id="sb" type="number" min="1" step="1" value="${SL.bet}" style="width:110px">${[5,10,25,100].map(x=>`<button class="alt" data-a="slbet" data-v="${x}">${x}</button>`).join('')}<button class="alt" data-a="slmax">Max</button><button id="slgo" data-a="slgo">Spin</button></div><div class="panel mut">Pays (× bet): 🍒🍒🍒 5 · 🍋🍋🍋 8 · 🔔🔔🔔 15 · ⭐⭐⭐ 25 · 💎💎💎 60 · 7️⃣7️⃣7️⃣ 200 · any two 🍒 2</div>`;
+  paintSlots()
 }
 /* ---------- rendering ---------- */
 const shown=new Set(),prevChips={};
@@ -302,7 +365,7 @@ document.addEventListener('click',e=>{
   const bk=e.target.closest('#bank'),rs=e.target.closest('#breset');
   if(bk){const m=$('#bankmenu'),wasHidden=m.hidden;bankClose();m.hidden=!wasHidden;return}
   if(rs){
-    if(S&&['bet','play','dealer','spin'].includes(S.phase)){$('#bmsg').textContent='Finish this round first.';return}
+    if((S&&['bet','play','dealer','spin'].includes(S.phase))||SL.busy){$('#bmsg').textContent='Finish this round first.';return}
     if(!bankArm){bankArm=true;rs.classList.add('armed');rs.textContent='Are you sure?';return}
     bankClose();saveBank(100);
     if(S)act({type:'resetchips'});else render();
@@ -312,11 +375,12 @@ document.addEventListener('click',e=>{
 });
 function render(){
   syncBank();
+  if(slotsOn&&!S)return renderSlots();
   const A=$('#app');
   if(!S){
     A.innerHTML='<h1>♠ Casino Night</h1><p class="mut">Blackjack or roulette — against bots, or at a table with friends.</p>'+
     '<div class="panel"><label class="mut">Your name</label><input id="nm" maxlength="14" value="'+esc(myName)+'" placeholder="Your name"></div>'+
-    '<div class="grid"><div class="panel"><b>Solo</b><p class="mut">You and two bots.</p><button data-a="solo">♠ Blackjack</button> <button data-a="solorl">◉ Roulette</button></div>'+
+    '<div class="grid"><div class="panel"><b>Solo</b><p class="mut">You and two bots.</p><button data-a="solo">♠ Blackjack</button> <button data-a="solorl">◉ Roulette</button> <button data-a="slots">🎰 Slots</button></div>'+
     '<div class="panel"><b>Host a table</b><p class="mut">Get a code and share this page’s link.</p><button data-a="create" '+(dbm?'':'disabled')+'>♠ Blackjack</button> <button data-a="createrl" '+(dbm?'':'disabled')+'>◉ Roulette</button>'+(dbm?'':'<p class="mut">Sign in to host.</p>')+'</div>'+
     '<div class="panel"><b>Join a table</b><div class="row"><input id="cd" maxlength="4" placeholder="CODE" style="width:110px;text-transform:uppercase"><button data-a="join" '+(dbm?'':'disabled')+'>Join</button></div></div></div>'+
     (note?'<p class="msg">'+esc(note)+'</p>':'')+
@@ -327,11 +391,11 @@ function render(){
   const me=S.players.find(p=>p.id===uid),mid=S.phase==='play'||S.phase==='dealer',lobbyish=S.phase==='lobby'||S.phase==='over';
   const dv=val(S.dealer).t;
   let h='<div class="row" style="justify-content:space-between;padding-right:92px"><h1>♠ Blackjack Night</h1><div class="row">'+(code?'<span class="code">'+code+'</span>':'')+'<button class="alt" data-a="leave">Leave</button></div></div>';
-  h+='<div class="felt"><h3>Dealer'+(S.dealer.length&&S.phase!=='play'?' · '+dv:'')+'</h3><div class="hand">'+S.dealer.map((c,i)=>card(c,S.phase==='play'&&i===1,S.round+'d'+i,i<2?(S.players.length*2+i)*.12:0)).join('')+'</div></div>';
-  h+='<div class="msg">'+esc(S.msg)+'</div>';
+  h+='<div class="felt"><h3>Dealer'+(S.dealer.length&&S.phase!=='play'?' · '+dv:'')+'</h3><div class="hand">'+(S.phase==='bet'?deckHtml():'')+S.dealer.map((c,i)=>card(c,S.phase==='play'&&i===1,S.round+'d'+i,i<2?(S.players.length*2+i)*.12:0)).join('')+'</div></div>';
+  h+='<div class="msg">'+esc(S.msg)+(S.note?' · '+esc(S.note):'')+'</div>';
   h+='<div class="felt"><div class="grid">'+S.players.map((p,i)=>{
     const v=p.hand.length?val(p.hand).t:'';
-    return'<div class="seat'+(i===S.turn&&S.phase==='play'?' turn':'')+(p.id===uid?' me':'')+(S.phase==='over'&&p.in?(p.delta>0&&fresh(S.round+p.id+'w')?' win':p.delta<0?' lose':''):'')+(p.status==='bust'&&fresh(S.round+p.id+'b')?' bust':'')+'"><div class="nm">'+esc(p.name)+(p.id===uid?'<span class="tag">you</span>':'')+(p.bot?'<span class="tag">bot</span>':'')+'</div>'+
+    return'<div class="seat'+(i===S.turn&&S.phase==='play'?' turn':'')+(p.id===uid?' me':'')+(S.phase==='over'&&p.in?(p.delta>0&&fresh(S.round+p.id+'w')?' win':p.delta<0?' lose':''):'')+(p.status==='bust'&&fresh(S.round+p.id+'b')?' bust':'')+'"><div class="nm">'+esc(p.name)+(p.id===uid?'<span class="tag">you</span>':'')+(p.carl?'<span class="tag" style="background:var(--gold);color:#111">★ rare</span>':p.bot?'<span class="tag">bot</span>':'')+(p.carl&&me&&!me.bot?'<div><button data-a="follow" style="padding:4px 10px;font-size:12px;margin-top:4px">'+(me.follow?'Following ✓':'Follow Carl')+'</button></div>':'')+'</div>'+
     '<div><i class="coin"></i> <span data-id="'+esc(p.id)+'" data-chips="'+p.chips+'">'+p.chips+'</span>'+(p.bet?' · bet '+p.bet:'')+'</div><div class="hand">'+p.hand.map((c,j)=>card(c,false,S.round+p.id+j,j<2?(i*2+j)*.12:0)).join('')+'</div>'+
     '<div>'+(v!==''?'Total '+v:'')+' '+(p.status==='bust'?'· bust':'')+'</div>'+
     (p.res?'<div class="res">'+p.res+' ('+(p.delta>0?'+':'')+p.delta+')</div>':'')+(!p.in&&S.phase!=='lobby'?'<div class="mut">'+(p.chips<=0?'Out of chips — use the chip menu':'Sitting out')+'</div>':'')+'</div>'
@@ -349,7 +413,7 @@ function render(){
 }
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
-  if(a==='betc')betCustom();else if(a==='solo')solo();else if(a==='solorl')solo('rl');else if(a==='create')create();else if(a==='createrl')create('rl');else if(a==='stk'){stake=+b.dataset.v;render()}else if(a==='spot')spotBet(b.dataset.k);else if(a==='resetbank'){saveBank(500);render()}else if(a==='join')join();else if(a==='leave')leave();
+  if(a==='betc')betCustom();else if(a==='solo')solo();else if(a==='solorl')solo('rl');else if(a==='create')create();else if(a==='createrl')create('rl');else if(a==='stk'){stake=+b.dataset.v;render()}else if(a==='spot')spotBet(b.dataset.k);else if(a==='slots'){slotsOn=true;render()}else if(a==='slbet'){SL.bet=+b.dataset.v;const i=$('#sb');if(i)i.value=SL.bet}else if(a==='slmax'){SL.bet=loadBank();const i=$('#sb');if(i)i.value=SL.bet}else if(a==='slgo'){const i=$('#sb');SL.bet=Math.floor(+(i&&i.value))||SL.bet;slotsGo()}else if(a==='resetbank'){saveBank(500);render()}else if(a==='join')join();else if(a==='leave')leave();
   else act({type:a,v:b.dataset.v?+b.dataset.v:0,name:myName})
 });
 render();
