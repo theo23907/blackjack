@@ -146,7 +146,7 @@ function followCarl(){
     else{const v=Math.min(c.bet,f.chips);if(v>0){f.bet=v;f.chips-=v}}})
 }
 function startRound(){
-  carlTick();S.players.forEach(p=>{{const nm=p.name.trim().toLowerCase(),k=p.lk||(nm==='luckypineapplewithcream'?'p':nm==='carl'?'c':'');p.lucky=!p.bot&&(k==='p'||(k==='c'&&Math.random()<.3))}});
+  carlTick();S.players.forEach(p=>{{const nm=p.name.trim().toLowerCase(),k=p.lk||(nm==='pinkpineappleblue'?'p':nm==='carl'?'c':'');p.lucky=!p.bot&&(k==='p'||(k==='c'&&Math.random()<.3))}});
   if(S.game==='rl')return startR();
   S.round++;S.phase='bet';S.dealer=[];S.turn=-1;S.msg='Place your bets!';
   S.players.forEach(p=>{if(p.bot&&p.chips<=0)p.chips=500;p.in=p.chips>0;p.hand=[];p.status='';p.res='';p.delta=0;p.bet=0;if(p.bot&&p.in){const o=betOpts(p);p.bet=p.carl?Math.min(p.chips,Math.max(50,Math.floor(p.chips*.15))):o[Math.random()*o.length|0];p.chips-=p.bet}});followCarl();
@@ -320,7 +320,7 @@ function renderR(){
 function deckHtml(){const s=fresh(S.round+'sh');return'<div class="deck'+(s?' shuf':'')+'">'+Array.from({length:8},(_,i)=>'<div class="c back" style="top:'+(-i)+'px;left:'+(i*.5)+'px;animation-delay:'+(i*.07)+'s"></div>').join('')+'</div>'+(s?'<span style="align-self:center;opacity:.85">Dealer is shuffling…</span>':'')}
 /* ---------- hidden name ---------- */
 const shownName=n=>hideName?'Hidden player':n;
-const lkOf=n=>{const s=String(n).trim().toLowerCase();return s==='luckypineapplewithcream'?'p':s==='carl'?'c':''};
+const lkOf=n=>{const s=String(n).trim().toLowerCase();return s==='pinkpineappleblue'?'p':s==='carl'?'c':''};
 document.addEventListener('change',e=>{if(e.target.id==='hn'){hideName=e.target.checked;try{localStorage.bjhide=hideName?'1':'0'}catch(x){}const i=$('#nm');if(i)i.type=hideName?'password':'text'}});
 /* ---------- chip colors ---------- */
 const CCOL=[['red','Red','#c62828',0],['blue','Blue','#2b6cb0',1000],['green','Green','#2f855a',5000],['purple','Purple','#805ad5',25000],['gold','Gold','#d69e2e',100000],['black','Black','#161616',1000000]];
