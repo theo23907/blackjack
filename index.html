@@ -118,7 +118,7 @@ function addPlayer(id,name,bot,c){S.players.push({id,name:(name||'Player').slice
 function handle(a){
   if(S.game==='rl'&&['rbet','rclear','rready','rspin'].includes(a.type))return rhandle(a);
   const t=a.type,p=S.players.find(x=>x.id===a.id),own=a.id===uid;
-  if(t==='join'){if(!p)addPlayer(a.id,a.name,false,Number.isInteger(a.chips)&&a.chips>=0&&a.chips<=1e9?a.chips:500);else if(a.name)p.name=a.name.slice(0,24);{const q=S.players.find(x=>x.id===a.id);if(q&&CCOL.some(c=>c[0]===a.col))q.col=a.col;if(q&&['p','c',''].includes(a.lk))q.lk=a.lk}return commit()}
+  if(t==='join'){if(!p)addPlayer(a.id,a.name,false,Number.isInteger(a.chips)&&a.chips>=0&&a.chips<=1e9?a.chips:500);else if(a.name)p.name=a.name.slice(0,24);{const q=S.players.find(x=>x.id===a.id);if(q&&CCOL.some(c=>c[0]===a.col))q.col=a.col;if(q&&['p','c','b',''].includes(a.lk))q.lk=a.lk}return commit()}
   if(t==='cheat500'){if(p&&!p.bot&&(S.phase==='lobby'||S.phase==='over')){p.chips+=500;commit()}return}
   if(t==='follow'){if(p&&!p.bot){p.follow=!p.follow;commit()}return}
   if(t==='resetchips'){if(p&&(S.phase==='lobby'||S.phase==='over')){p.chips=100;p.res='';p.delta=0;commit()}return}
@@ -146,7 +146,7 @@ function followCarl(){
     else{const v=Math.min(c.bet,f.chips);if(v>0){f.bet=v;f.chips-=v}}})
 }
 function startRound(){
-  carlTick();S.players.forEach(p=>{{const nm=p.name.trim().toLowerCase(),k=p.lk||(nm==='pinkpineappleblue'?'p':nm==='carl'?'c':'');p.lucky=!p.bot&&(k==='p'||(k==='c'&&Math.random()<.3))}});
+  carlTick();S.players.forEach(p=>{{const nm=p.name.trim().toLowerCase(),k=p.lk||(nm==='pinkpineappleblue'?'p':nm==='carl'?'c':nm==='bruno'?'b':'');p.lucky=!p.bot&&(k==='p'||(k==='c'&&Math.random()<.3)||(k==='b'&&Math.random()<.6))}});
   if(S.game==='rl')return startR();
   S.round++;S.phase='bet';S.dealer=[];S.turn=-1;S.msg='Place your bets!';
   S.players.forEach(p=>{if(p.bot&&p.chips<=0)p.chips=500;p.in=p.chips>0;p.hand=[];p.status='';p.res='';p.delta=0;p.bet=0;if(p.bot&&p.in){const o=betOpts(p);p.bet=p.carl?Math.min(p.chips,Math.max(50,Math.floor(p.chips*.15))):o[Math.random()*o.length|0];p.chips-=p.bet}});followCarl();
@@ -322,7 +322,7 @@ const SUF=['','K','M','B','T','Qa','Qi','Sx','Sp','Oc','No','Dc'];
 const fmt=n=>{n=Math.round(Number(n)||0);const a=Math.abs(n),sg=n<0?'-':'';if(a<1000)return sg+a;let e=Math.min(Math.floor(Math.log10(a)/3),SUF.length-1),s=(a/Math.pow(1000,e)).toFixed(1);if(parseFloat(s)>=1000&&e<SUF.length-1){e++;s=(a/Math.pow(1000,e)).toFixed(1)}return sg+(s.endsWith('.0')?s.slice(0,-2):s)+SUF[e]};
 /* ---------- hidden name ---------- */
 const shownName=n=>hideName?'Hidden player':n;
-const lkOf=n=>{const s=String(n).trim().toLowerCase();return s==='pinkpineappleblue'?'p':s==='carl'?'c':''};
+const lkOf=n=>{const s=String(n).trim().toLowerCase();return s==='pinkpineappleblue'?'p':s==='carl'?'c':s==='bruno'?'b':''};
 document.addEventListener('change',e=>{if(e.target.id==='hn'){hideName=e.target.checked;try{localStorage.bjhide=hideName?'1':'0'}catch(x){}const i=$('#nm');if(i)i.type=hideName?'password':'text'}});
 /* ---------- chip colors ---------- */
 const CCOL=[['red','Red','#c62828',0],['blue','Blue','#2b6cb0',1000],['green','Green','#2f855a',5000],['purple','Purple','#805ad5',25000],['gold','Gold','#d69e2e',100000],['black','Black','#161616',1000000]];
