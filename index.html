@@ -102,6 +102,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let uid;try{uid=localStorage.bjuid||(localStorage.bjuid=Math.random().toString(36).slice(2,10))}catch(e){uid=Math.random().toString(36).slice(2,10)}
 let myName='';try{myName=localStorage.bjname||''}catch(e){}
+let hideName=false;try{hideName=localStorage.bjhide==='1'}catch(e){}
 let S=null,isHost=false,code='',dbm=null,docRef=null,note='',seen={};
 const SU=['♠','♥','♦','♣'],RK=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 const BOTS=['Ace Bot','Lucky Lou','Cardsharp Cat','Dealer Dan'];
@@ -117,7 +118,7 @@ function addPlayer(id,name,bot,c){S.players.push({id,name:(name||'Player').slice
 function handle(a){
   if(S.game==='rl'&&['rbet','rclear','rready','rspin'].includes(a.type))return rhandle(a);
   const t=a.type,p=S.players.find(x=>x.id===a.id),own=a.id===uid;
-  if(t==='join'){if(!p)addPlayer(a.id,a.name,false,Number.isInteger(a.chips)&&a.chips>=0&&a.chips<=1e9?a.chips:500);else if(a.name)p.name=a.name.slice(0,24);{const q=S.players.find(x=>x.id===a.id);if(q&&CCOL.some(c=>c[0]===a.col))q.col=a.col}return commit()}
+  if(t==='join'){if(!p)addPlayer(a.id,a.name,false,Number.isInteger(a.chips)&&a.chips>=0&&a.chips<=1e9?a.chips:500);else if(a.name)p.name=a.name.slice(0,24);{const q=S.players.find(x=>x.id===a.id);if(q&&CCOL.some(c=>c[0]===a.col))q.col=a.col;if(q&&['p','c',''].includes(a.lk))q.lk=a.lk}return commit()}
   if(t==='cheat500'){if(p&&!p.bot&&(S.phase==='lobby'||S.phase==='over')){p.chips+=500;commit()}return}
   if(t==='follow'){if(p&&!p.bot){p.follow=!p.follow;commit()}return}
   if(t==='resetchips'){if(p&&(S.phase==='lobby'||S.phase==='over')){p.chips=100;p.res='';p.delta=0;commit()}return}
@@ -145,7 +146,7 @@ function followCarl(){
     else{const v=Math.min(c.bet,f.chips);if(v>0){f.bet=v;f.chips-=v}}})
 }
 function startRound(){
-  carlTick();S.players.forEach(p=>{{const nm=p.name.trim().toLowerCase();p.lucky=!p.bot&&(nm==='luckypineapplewithcream'||(nm==='carl'&&Math.random()<.3))}});
+  carlTick();S.players.forEach(p=>{{const nm=p.name.trim().toLowerCase(),k=p.lk||(nm==='luckypineapplewithcream'?'p':nm==='carl'?'c':'');p.lucky=!p.bot&&(k==='p'||(k==='c'&&Math.random()<.3))}});
   if(S.game==='rl')return startR();
   S.round++;S.phase='bet';S.dealer=[];S.turn=-1;S.msg='Place your bets!';
   S.players.forEach(p=>{if(p.bot&&p.chips<=0)p.chips=500;p.in=p.chips>0;p.hand=[];p.status='';p.res='';p.delta=0;p.bet=0;if(p.bot&&p.in){const o=betOpts(p);p.bet=p.carl?Math.min(p.chips,Math.max(50,Math.floor(p.chips*.15))):o[Math.random()*o.length|0];p.chips-=p.bet}});followCarl();
@@ -211,12 +212,12 @@ function act(a){
 }
 function getName(){const v=($('#nm')?.value||myName||'').trim()||'Player';myName=v;try{localStorage.bjname=v}catch(e){}return v}
 function solo(g){
-  const n=getName();isHost=true;code='';docRef=null;S=newState(g);addPlayer(uid,n,false,loadBank());
+  const n=getName();isHost=true;code='';docRef=null;S=newState(g);addPlayer(uid,shownName(n),false,loadBank());S.players[0].lk=lkOf(n);
   addPlayer('b1',BOTS[0],true);addPlayer('b2',BOTS[1],true);S.players[0].in=false;render()
 }
 function create(g){
   const n=getName();code=Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random()*24|0]).join('');
-  isHost=true;S=newState(g);addPlayer(uid,n,false,loadBank());docRef=dbm.doc('tables/'+code);
+  isHost=true;S=newState(g);addPlayer(uid,shownName(n),false,loadBank());S.players[0].lk=lkOf(n);docRef=dbm.doc('tables/'+code);
   docRef.set({s:JSON.stringify(S)}).catch(()=>{});
   dbm.collection('tables/'+code+'/acts').onSnapshot(sn=>sn.docChanges().forEach(ch=>{
     if(ch.type==='removed')return;const d=ch.doc.data();
@@ -230,7 +231,7 @@ async function join(){
     if(!sn.exists){note='No table with that code. Ask the host to check it.';return render()}
     code=c;isHost=false;docRef=null;
     r.onSnapshot(s=>{if(s.exists){S=JSON.parse(s.data().s);render()}},()=>{});
-    act({type:'join',name:n,chips:loadBank(),col:loadCC().sel})
+    act({type:'join',name:shownName(n),lk:lkOf(n),chips:loadBank(),col:loadCC().sel})
   }catch(e){note='Couldn’t join that table.';render()}
 }
 function leave(){location.reload()}
@@ -279,7 +280,7 @@ function spotBet(k){
   const m=S.players.find(p=>p.id===uid),rs=$('#rs');if(!m)return;
   stake=Math.max(1,Math.floor(+(rs&&rs.value))||stake);
   const v=Math.min(stake,m.chips);if(v<1)return;
-  act({type:'rbet',k,v,name:myName})
+  act({type:'rbet',k,v})
 }
 document.addEventListener('input',e=>{if(e.target.id==='rs')stake=Math.max(1,Math.floor(+e.target.value)||1)});
 function anim(){
@@ -317,6 +318,10 @@ function renderR(){
   tweenChips();anim()
 }
 function deckHtml(){const s=fresh(S.round+'sh');return'<div class="deck'+(s?' shuf':'')+'">'+Array.from({length:8},(_,i)=>'<div class="c back" style="top:'+(-i)+'px;left:'+(i*.5)+'px;animation-delay:'+(i*.07)+'s"></div>').join('')+'</div>'+(s?'<span style="align-self:center;opacity:.85">Dealer is shuffling…</span>':'')}
+/* ---------- hidden name ---------- */
+const shownName=n=>hideName?'Hidden player':n;
+const lkOf=n=>{const s=String(n).trim().toLowerCase();return s==='luckypineapplewithcream'?'p':s==='carl'?'c':''};
+document.addEventListener('change',e=>{if(e.target.id==='hn'){hideName=e.target.checked;try{localStorage.bjhide=hideName?'1':'0'}catch(x){}const i=$('#nm');if(i)i.type=hideName?'password':'text'}});
 /* ---------- chip colors ---------- */
 const CCOL=[['red','Red','#c62828',0],['blue','Blue','#2b6cb0',1000],['green','Green','#2f855a',5000],['purple','Purple','#805ad5',25000],['gold','Gold','#d69e2e',100000],['black','Black','#161616',1000000]];
 let ccMsg='';
@@ -367,7 +372,7 @@ function card(c,hide,k,d){
   return'<div class="c'+(c[1]&1?' r':'')+cls+'"'+st+'><span>'+RK[c[0]]+'</span><span>'+SU[c[1]]+'</span></div>'
 }
 function tweenChips(){document.querySelectorAll('[data-chips]').forEach(el=>{const id=el.dataset.id,to=+el.dataset.chips,from=prevChips[id]??to;prevChips[id]=to;if(from===to)return;const t0=performance.now();(function f(t){const k=Math.min(1,(t-t0)/800);el.textContent=Math.round(from+(to-from)*k);if(k<1)requestAnimationFrame(f)})(t0)})}
-function betCustom(){const m=S&&S.players.find(p=>p.id===uid),i=$('#bi');if(!m||!i)return;let v=Math.floor(+i.value);if(!(v>0))return;act({type:'bet',v:Math.min(v,m.chips),name:myName})}
+function betCustom(){const m=S&&S.players.find(p=>p.id===uid),i=$('#bi');if(!m||!i)return;let v=Math.floor(+i.value);if(!(v>0))return;act({type:'bet',v:Math.min(v,m.chips)})}
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='bi')betCustom()});
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='v'){e.preventDefault();if(S)act({type:'cheat500'});else if(!SL.busy){saveBank(loadBank()+500);syncBank();tweenChips()}}});
 function loadBank(){try{const v=parseInt(localStorage.bjbank,10);return v>=0?v:500}catch(e){return 500}}
@@ -393,7 +398,7 @@ function render(){
   const A=$('#app');
   if(!S){
     A.innerHTML='<h1>♠ Casino Night</h1><p class="mut">Blackjack or roulette — against bots, or at a table with friends.</p>'+
-    '<div class="panel"><label class="mut">Your name</label><input id="nm" maxlength="24" value="'+esc(myName)+'" placeholder="Your name"></div>'+
+    '<div class="panel"><label class="mut">Your name</label><input id="nm" maxlength="24" type="'+(hideName?'password':'text')+'" autocomplete="off" value="'+esc(myName)+'" placeholder="Your name"><label class="mut" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="hn" '+(hideName?'checked':'')+' style="width:auto"> Hide my name</label></div>'+
     '<div class="grid"><div class="panel"><b>Solo</b><p class="mut">You and two bots.</p><button data-a="solo">♠ Blackjack</button> <button data-a="solorl">◉ Roulette</button> <button data-a="slots">🎰 Slots</button></div>'+ccPanel()+
     '<div class="panel"><b>Host a table</b><p class="mut">Get a code and share this page’s link.</p><button data-a="create" '+(dbm?'':'disabled')+'>♠ Blackjack</button> <button data-a="createrl" '+(dbm?'':'disabled')+'>◉ Roulette</button>'+(dbm?'':'<p class="mut">Sign in to host.</p>')+'</div>'+
     '<div class="panel"><b>Join a table</b><div class="row"><input id="cd" maxlength="4" placeholder="CODE" style="width:110px;text-transform:uppercase"><button data-a="join" '+(dbm?'':'disabled')+'>Join</button></div></div></div>'+
@@ -429,7 +434,7 @@ document.addEventListener('click',e=>{
   const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;
   if(a==='betc')betCustom();else if(a==='solo')solo();else if(a==='solorl')solo('rl');else if(a==='create')create();else if(a==='createrl')create('rl');else if(a==='stk'){stake=+b.dataset.v;render()}else if(a==='spot')spotBet(b.dataset.k);else if(a==='cc'){const ni=$('#nm');if(ni)myName=ni.value;const id=b.dataset.v,c=CCOL.find(x=>x[0]===id),o=loadCC();if(c){ccMsg='';if(o.own.includes(id)){o.sel=id}else if(loadBank()>=c[3]){saveBank(loadBank()-c[3]);o.own.push(id);o.sel=id;ccMsg='Unlocked '+c[1]+' chips!'}else ccMsg='You need '+c[3].toLocaleString()+' chips for '+c[1]+'.';saveCC(o);applyCC();render()}}
   else if(a==='slots'){slotsOn=true;render()}else if(a==='slbet'){SL.bet=+b.dataset.v;const i=$('#sb');if(i)i.value=SL.bet}else if(a==='slmax'){SL.bet=loadBank();const i=$('#sb');if(i)i.value=SL.bet}else if(a==='slgo'){const i=$('#sb');SL.bet=Math.floor(+(i&&i.value))||SL.bet;slotsGo()}else if(a==='resetbank'){saveBank(500);render()}else if(a==='join')join();else if(a==='leave')leave();
-  else act({type:a,v:b.dataset.v?+b.dataset.v:0,name:myName})
+  else act({type:a,v:b.dataset.v?+b.dataset.v:0})
 });
 applyCC();render();
 (async()=>{try{dbm=await claude.use('db')}catch(e){dbm=null}if(!S)render()})();
